@@ -509,11 +509,21 @@ function procesarTodo() {
     var ocs = procesarOC(resultados[2]);
     setMsg('Generando alertas...');
     setTimeout(function() {
-      _articulos = articulos;
-      allData = generarAlertas(articulos, consumos, ocs);
-      buildPareto(articulos);
-      buildDashboard();
+      try {
+        _articulos = articulos;
+        allData = generarAlertas(articulos, consumos, ocs);
+        buildPareto(articulos);
+        buildDashboard();
+      } catch(err) {
+        document.getElementById('loading').style.display = 'none';
+        alert('Error al procesar: ' + err.message);
+        console.error(err);
+      }
     }, 100);
+  }).catch(function(err) {
+    document.getElementById('loading').style.display = 'none';
+    alert('Error al leer archivos: ' + err.message);
+    console.error(err);
   });
 }
 
@@ -772,17 +782,21 @@ function buildDashboard() {
 
 function volverUpload() {
   document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('vista-pareto').style.display = 'none';
+  document.getElementById('nav-pareto').style.display = 'none';
   document.getElementById('btn-volver').style.display = 'none';
   document.getElementById('upload-zone').style.display = 'flex';
-  document.getElementById('nav-pareto').style.display = 'none';
-  document.getElementById('vista-pareto').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'none';
+  // Reset slots
+  fileObjs = [null, null, null];
+  ['slot1','slot2','slot3'].forEach(function(s){ document.getElementById(s).classList.remove('loaded'); });
+  ['st1','st2','st3'].forEach(function(s){ document.getElementById(s).textContent = 'Clic para seleccionar'; });
+  document.getElementById('btn-procesar').classList.remove('ready');
 }
 
 // ---- FILTROS Y TABLA ----
 function setTab(tab, el) {
   currentTab = tab; page = 1;
-  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('#dashboard .tab').forEach(function(t){ t.classList.remove('active'); });
   el.classList.add('active');
   applyFilters();
 }
