@@ -516,16 +516,25 @@ function procesarArticulos(rows) {
   var map = {};
   rows.forEach(function(r) {
     var keys = Object.keys(r);
-    var sku='', desc='', stock=0, planf=false;
-    // Prioridad explícita para nombres conocidos
+    var sku='', desc='', stock=0, planf=false, agrup='';
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (!sku  && (kn==='CODARTICULO'||kn==='COD_ARTICULO'||kn==='CODARTIC'||kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO'||kn==='CÓDIGO')) sku = norm(r[k]);
-      if (!desc && (kn==='NOMARTICULO'||kn==='NOM_ARTICULO'||kn.indexOf('DESC')>=0||kn.indexOf('NOMBRE')>=0||kn.indexOf('NOM')>=0)) desc = String(r[k]||'').trim();
-      if (stock===0 && (kn.indexOf('STOCK')>=0||kn.indexOf('EXISTENCIA')>=0||kn.indexOf('SALDO')>=0)) stock = parseFloat(r[k])||0;
-      if (kn.indexOf('PLANIF')>=0||kn.indexOf('PLAN_C')>=0||kn.indexOf('PLANIFICABLE')>=0) planf = (norm(r[k])==='S'||norm(r[k])==='SI'||norm(r[k])==='1'||norm(r[k])==='TRUE');
+      // SKU: "Codigo" primero, luego variantes
+      if (!sku  && (kn==='CODIGO'||kn==='CODARTICULO'||kn==='COD_ARTICULO'||kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0)) sku = norm(r[k]);
+      // Descripción
+      if (!desc && (kn==='DESCRIPCION'||kn==='NOMARTICULO'||kn==='NOM_ARTICULO'||kn.indexOf('DESC')>=0||kn.indexOf('NOMBRE')>=0)) desc = String(r[k]||'').trim();
+      // Stock: columna "actual" específicamente, luego variantes
+      if (kn==='ACTUAL') stock = parseFloat(r[k])||0;
+      else if (stock===0 && (kn.indexOf('STOCK')>=0||kn.indexOf('EXISTENCIA')>=0||kn.indexOf('SALDO')>=0)) stock = parseFloat(r[k])||0;
+      // Planificable: "Planf_Compra" con VERDADERO/FALSO
+      if (kn==='PLANF_COMPRA'||kn==='PLANFCOMPRA'||kn.indexOf('PLANIF')>=0||kn.indexOf('PLAN_C')>=0||kn.indexOf('PLANIFICABLE')>=0) {
+        var v = norm(r[k]);
+        planf = (v==='VERDADERO'||v==='TRUE'||v==='S'||v==='SI'||v==='1');
+      }
+      // Agrupación
+      if (!agrup && (kn==='AGRUPACION'||kn.indexOf('AGRUP')>=0||kn.indexOf('GRUPO')>=0||kn.indexOf('CATEG')>=0||kn.indexOf('FAMILIA')>=0)) agrup = String(r[k]||'').trim();
     });
-    if (sku) map[sku] = {sku:sku, desc:desc, stock:stock, planf:planf};
+    if (sku) map[sku] = {sku:sku, desc:desc, stock:stock, planf:planf, agrup:agrup};
   });
   return map;
 }
@@ -582,15 +591,19 @@ function procesarSalidas(rows) {
     // Filtrar por ventana de 6 meses
     if (fecha && fecha < limite) return;
 
-    // Buscar cantidad
+    // Buscar cantidad: CANTARTICULO estrictamente, nunca TOTAL (que es precio)
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (cant===0 && (kn==='CANTARTICULO'||kn==='CANT_ARTICULO')) cant = parseFloat(r[k])||0;
+      if (cant===0 && (kn==='CANTARTICULO'||kn==='CANT_ARTICULO'||kn==='CANTIDADARTICULO')) cant = parseFloat(r[k])||0;
     });
     if (cant===0) {
       keys.forEach(function(k) {
         var kn = norm(k);
-        if (cant===0 && (kn.indexOf('CANT')>=0||kn.indexOf('SALIDA')>=0||kn.indexOf('DESP')>=0||kn.indexOf('CONSU')>=0)) cant = parseFloat(r[k])||0;
+        // Excluir TOTAL y PRECIO explícitamente
+        if (cant===0 && kn!=='TOTAL' && kn!=='PRECIOUNITARIO' && kn!=='PRECIO'
+            && (kn.indexOf('CANT')>=0||kn.indexOf('SALIDA')>=0||kn.indexOf('DESP')>=0||kn.indexOf('CONSU')>=0)) {
+          cant = parseFloat(r[k])||0;
+        }
       });
     }
 
@@ -684,7 +697,7 @@ function generarAlertas(articulos, consumos, ocs) {
 
     if (enAlerta) {
       var ocInfo = ocs[sku] || {pend:0, agrup:''};
-      var agrupFinal = ocInfo.agrup || '';
+      var agrupFinal = ocInfo.agrup || art.agrup || '';
       resultado.push({
         sku        : art.sku,
         desc       : art.desc,
