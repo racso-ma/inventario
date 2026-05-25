@@ -517,12 +517,13 @@ function procesarArticulos(rows) {
   rows.forEach(function(r) {
     var keys = Object.keys(r);
     var sku='', desc='', stock=0, planf=false;
+    // Prioridad explícita para nombres conocidos
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (!sku  && (kn.indexOf('CODI')>=0 || kn.indexOf('SKU')>=0 || kn==='ARTICULO' || kn==='CÓDIGO')) sku  = norm(r[k]);
-      if (!desc && (kn.indexOf('DESC')>=0 || kn.indexOf('NOMBRE')>=0)) desc = String(r[k]||'').trim();
-      if (stock===0 && (kn.indexOf('STOCK')>=0 || kn.indexOf('EXISTENCIA')>=0 || kn.indexOf('SALDO')>=0)) stock = parseFloat(r[k])||0;
-      if (kn.indexOf('PLANIF')>=0 || kn.indexOf('PLAN_C')>=0 || kn.indexOf('PLANIFICABLE')>=0) planf = (norm(r[k])==='S'||norm(r[k])==='SI'||norm(r[k])==='1'||norm(r[k])==='TRUE');
+      if (!sku  && (kn==='CODARTICULO'||kn==='COD_ARTICULO'||kn==='CODARTIC'||kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO'||kn==='CÓDIGO')) sku = norm(r[k]);
+      if (!desc && (kn==='NOMARTICULO'||kn==='NOM_ARTICULO'||kn.indexOf('DESC')>=0||kn.indexOf('NOMBRE')>=0||kn.indexOf('NOM')>=0)) desc = String(r[k]||'').trim();
+      if (stock===0 && (kn.indexOf('STOCK')>=0||kn.indexOf('EXISTENCIA')>=0||kn.indexOf('SALDO')>=0)) stock = parseFloat(r[k])||0;
+      if (kn.indexOf('PLANIF')>=0||kn.indexOf('PLAN_C')>=0||kn.indexOf('PLANIFICABLE')>=0) planf = (norm(r[k])==='S'||norm(r[k])==='SI'||norm(r[k])==='1'||norm(r[k])==='TRUE');
     });
     if (sku) map[sku] = {sku:sku, desc:desc, stock:stock, planf:planf};
   });
@@ -534,11 +535,29 @@ function procesarSalidas(rows) {
   rows.forEach(function(r) {
     var keys = Object.keys(r);
     var sku='', cant=0;
+    // Prioridad: buscar CODARTICULO primero, luego variantes genéricas
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (!sku && (kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO'||kn==='CÓDIGO')) sku = norm(r[k]);
-      if (cant===0 && (kn.indexOf('CANT')>=0||kn.indexOf('TOTAL')>=0||kn.indexOf('SALIDA')>=0||kn.indexOf('DESP')>=0||kn.indexOf('CONSU')>=0)) cant = parseFloat(r[k])||0;
+      if (!sku && (kn==='CODARTICULO' || kn==='COD_ARTICULO' || kn==='CODARTIC')) sku = norm(r[k]);
     });
+    // Si no encontró, fallback genérico
+    if (!sku) {
+      keys.forEach(function(k) {
+        var kn = norm(k);
+        if (!sku && (kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO'||kn==='CÓDIGO')) sku = norm(r[k]);
+      });
+    }
+    // Buscar cantidad: CANTARTICULO primero, luego genérico
+    keys.forEach(function(k) {
+      var kn = norm(k);
+      if (cant===0 && (kn==='CANTARTICULO' || kn==='CANT_ARTICULO')) cant = parseFloat(r[k])||0;
+    });
+    if (cant===0) {
+      keys.forEach(function(k) {
+        var kn = norm(k);
+        if (cant===0 && (kn.indexOf('CANT')>=0||kn.indexOf('SALIDA')>=0||kn.indexOf('DESP')>=0||kn.indexOf('CONSU')>=0)) cant = parseFloat(r[k])||0;
+      });
+    }
     if (sku) { if (!map[sku]) map[sku]=0; map[sku]+=cant; }
   });
   return map;
