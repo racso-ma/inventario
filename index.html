@@ -532,25 +532,60 @@ function procesarArticulos(rows) {
 
 function procesarSalidas(rows) {
   var map = {};
+  // Ventana: últimos 6 meses desde hoy
+  var hoy = new Date();
+  var limite = new Date(hoy.getFullYear(), hoy.getMonth() - 6, hoy.getDate());
+
   rows.forEach(function(r) {
     var keys = Object.keys(r);
-    var sku='', cant=0;
-    // Prioridad: buscar CODARTICULO primero, luego variantes genéricas
+    var sku='', cant=0, fecha=null;
+
+    // Buscar SKU
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (!sku && (kn==='CODARTICULO' || kn==='COD_ARTICULO' || kn==='CODARTIC')) sku = norm(r[k]);
+      if (!sku && (kn==='CODARTICULO'||kn==='COD_ARTICULO'||kn==='CODARTIC')) sku = norm(r[k]);
     });
-    // Si no encontró, fallback genérico
     if (!sku) {
       keys.forEach(function(k) {
         var kn = norm(k);
         if (!sku && (kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO'||kn==='CÓDIGO')) sku = norm(r[k]);
       });
     }
-    // Buscar cantidad: CANTARTICULO primero, luego genérico
+
+    // Buscar fecha
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (cant===0 && (kn==='CANTARTICULO' || kn==='CANT_ARTICULO')) cant = parseFloat(r[k])||0;
+      if (!fecha && (kn==='FECHASALIDA'||kn.indexOf('FECHA')>=0)) {
+        var raw = r[k];
+        if (raw) {
+          // Puede venir como string DD-MM-YYYY, DD/MM/YYYY, o número Excel serial
+          if (typeof raw === 'number') {
+            // Excel date serial
+            var d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+            fecha = d;
+          } else {
+            var s = String(raw).trim();
+            // Intentar DD-MM-YYYY o DD/MM/YYYY
+            var parts = s.split(/[-\/]/);
+            if (parts.length === 3) {
+              var dd = parseInt(parts[0]), mm = parseInt(parts[1])-1, yy = parseInt(parts[2]);
+              if (yy < 100) yy += 2000;
+              fecha = new Date(yy, mm, dd);
+            } else {
+              fecha = new Date(raw);
+            }
+          }
+        }
+      }
+    });
+
+    // Filtrar por ventana de 6 meses
+    if (fecha && fecha < limite) return;
+
+    // Buscar cantidad
+    keys.forEach(function(k) {
+      var kn = norm(k);
+      if (cant===0 && (kn==='CANTARTICULO'||kn==='CANT_ARTICULO')) cant = parseFloat(r[k])||0;
     });
     if (cant===0) {
       keys.forEach(function(k) {
@@ -558,6 +593,7 @@ function procesarSalidas(rows) {
         if (cant===0 && (kn.indexOf('CANT')>=0||kn.indexOf('SALIDA')>=0||kn.indexOf('DESP')>=0||kn.indexOf('CONSU')>=0)) cant = parseFloat(r[k])||0;
       });
     }
+
     if (sku) { if (!map[sku]) map[sku]=0; map[sku]+=cant; }
   });
   return map;
@@ -565,16 +601,61 @@ function procesarSalidas(rows) {
 
 function procesarOC(rows) {
   var map = {};
+  // Ventana: últimas 3 meses desde hoy
+  var hoy = new Date();
+  var limite = new Date(hoy.getFullYear(), hoy.getMonth() - 3, hoy.getDate());
+
   rows.forEach(function(r) {
     var keys = Object.keys(r);
-    var sku='', pend=0, agrup='';
+    var sku='', pend=0, agrup='', fecha=null;
+
     keys.forEach(function(k) {
       var kn = norm(k);
-      if (!sku && (kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO'||kn==='CÓDIGO')) sku = norm(r[k]);
-      if (pend===0 && (kn.indexOf('PEND')>=0||kn.indexOf('RECIB')>=0||kn.indexOf('CANT')>=0)) pend = parseFloat(r[k])||0;
-      if (!agrup && (kn.indexOf('AGRUP')>=0||kn.indexOf('GRUPO')>=0||kn.indexOf('CATEG')>=0||kn.indexOf('FAMILIA')>=0)) agrup = String(r[k]||'').trim();
+      // SKU: Cod.Artículo o variantes
+      if (!sku && (kn==='COD.ARTICULO'||kn==='CODARTICULO'||kn==='COD_ARTICULO'||kn==='CODARTIC'||kn.indexOf('COD.ART')>=0)) sku = norm(r[k]);
+      // Fecha: F.Orden o variantes
+      if (!fecha && (kn==='F.ORDEN'||kn==='FORDEN'||kn==='FECHAORDEN'||kn==='FECHA_ORDEN'||kn.indexOf('F.ORD')>=0||kn.indexOf('FECHA')>=0)) {
+        var raw = r[k];
+        if (raw) {
+          if (typeof raw === 'number') {
+            fecha = new Date(Math.round((raw - 25569) * 86400 * 1000));
+          } else {
+            var s = String(raw).trim();
+            var parts = s.split(/[-\/]/);
+            if (parts.length === 3) {
+              var dd = parseInt(parts[0]), mm = parseInt(parts[1])-1, yy = parseInt(parts[2]);
+              if (yy < 100) yy += 2000;
+              fecha = new Date(yy, mm, dd);
+            } else {
+              fecha = new Date(raw);
+            }
+          }
+        }
+      }
+      // Cantidad pendiente
+      if (pend===0 && (kn.indexOf('PEND')>=0||kn.indexOf('RECIB')>=0)) pend = parseFloat(r[k])||0;
+      // Agrupación
+      if (!agrup && (kn.indexOf('AGRUP')>=0||kn.indexOf('GRUPO')>=0||kn.indexOf('CATEG')>=0||kn.indexOf('FAMILIA')>=0||kn==='COMPRA'||kn==='NIVEL ACTUAL'||kn==='NIVELACTUAL')) agrup = String(r[k]||'').trim();
     });
-    if (sku) {
+
+    // Excluir fuera de ventana de 3 meses
+    if (fecha && fecha < limite) return;
+    // Fallback SKU genérico
+    if (!sku) {
+      keys.forEach(function(k) {
+        var kn = norm(k);
+        if (!sku && (kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0||kn==='ARTICULO')) sku = norm(r[k]);
+      });
+    }
+    // Fallback cantidad
+    if (pend===0) {
+      keys.forEach(function(k) {
+        var kn = norm(k);
+        if (pend===0 && kn.indexOf('CANT')>=0) pend = parseFloat(r[k])||0;
+      });
+    }
+
+    if (sku && pend > 0) {
       if (!map[sku]) map[sku]={pend:0, agrup:''};
       map[sku].pend += pend;
       if (!map[sku].agrup && agrup) map[sku].agrup = agrup;
