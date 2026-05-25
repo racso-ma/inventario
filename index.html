@@ -706,7 +706,6 @@ function generarAlertas(articulos, consumos, ocs) {
   var resultado = [];
   Object.keys(articulos).forEach(function(sku) {
     var art = articulos[sku];
-    // Excluir laboratorio e implantes
     if (LAB_SKUS.has(sku)) return;
     if (art.agrup === 'IMPLANTES') return;
     var totalSalidas6m = consumos[sku] || 0;
@@ -882,6 +881,100 @@ function exportCSV() {
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'alertas_stock_' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
 }
+
+// ---- SKUS LABORATORIO ----
+var LAB_SKUS = new Set(["30206836","30206837","30206839","30206840","30206841","30206842","30206844","30206935","3550471","3551041","3555069","3555070","3555071","3555074","3555076","3555077","3555078","3555079","3555082","3555083","3555084","3555085","3555086","3555087","3555088","3555089","3555090","3555091","3555092","3555093","3555094","3555095","3555096","3555097","3555098","3555099","3555100","3555101","3555102","3555103","3555104","3555106","3555112","3555113","3555114","3555115","3555116","3555118","3555119","3555121","3555123","3555124","3555125","3555126","3555127","3555128","3555129","3555131","3555132","3555133","3555139","3555140","3555141","3555142","3555144","3555145","3555146","3555147","3555148","3555150","3555151","3555152","3555153","3555154","3555155","3555156","3555157","3555158","3555159","3555160","3555161","3555162","3555163","3555164","3555166","3555167","3555168","3555169","3555170","3555171","3555172","3555173","3555174","3555175","3555176","3555177","3555178","3555179","3555180","3555181","3555182","3555183","3555184","3555185","3555186","3555187","3555188","3555189","3555190","3555191","3555192","3555193","3555194","3555195","3555196","3555197","3555198","3555199","3555200","3555201","3555202","3555203","3555204","3555205","3555206","3555207","3555208","3555209","3555210","3555211","3555212","3555213","3555216","3555219","3555220","3555221","3555222","3555224","3555225","3555226","3555227","3555228","3555229","3555230","3555231","3555232","3555233","3555234","3555235","3555236","3555243","3555248","3555330","3555331","3555332","3555333","3555334","3555336","3555337","3555338","3555341","3555342","3555348","3555349","3555350","3555351","3555353","3555354","3555355","3555356","3555357","3555358","3555359","3555361","3555362","3555363","3555364","3555371","3555372","3555381","3555382","3555383","3555384","3555385","3555386","3555387","3555388","3555389","3555390","3555395","3555397","3555398","3555399","3555401","3555402","3555403","3555404","3555407","3555408","3555409","3555410","3555411","3555412","3555414","3555415","3555416","3555417","3555418","3555419","3555420","3555421","3555422","3555427","3555431","3555435","3555436","3555437","3555438","3555439","3555440","3555441","3555445","3555464","3555465","3555466","3555467","3555469","3555483","3555486","3555488","3555490","3555499","3555501","3555502","3555517","3555521","3555522","3555525","3555526","3555528","3555529","3555530","3555554","3555555","3555556","3555557","3555558","3555562","3555564","3555567","3555569","3555572","3555579","3555580","3555582","3555583","3555584","3555585","3555586","3555587","3555606","3555608","3555609","3555610","3555611","3555612","3555613","3555664","3555670","3555671","3555673","3555674","3555675","3555676","3555677","3555678","3555679","3800978","3800979","3800980","3800982","3800983","3800985","40200243","40200925","40202892","40202987","40203651","40204066","40204337","40204383","40204384","40204439","40204602","40204734","40204735","40204736","40204866","40204901","40204910","40205151","40205939","40206049","40206213","40206214","40206473","40206474","40206692","40206693","40206759","40206761","40206773","40206775","40206776","40206778","40206781","40206804","40206805","40206807","40206809","40206828","40206829","40206843","40206845","40206846","40206868","40206870","40206873","40206874","40206875","40206876","40206877","40206909","40206959","40207073","40207074","40207115","40207116","40207117","40207118","40207119","40207120","40207121","42901598","42901604","42901927","42901929","43700017","43700018","43700019"]);
+
+var dataPareto = [];
+var pagPareto = 1;
+
+function fmtN(v) { return Math.round(v).toLocaleString('es-CL'); }
+function fmtM(v) {
+  if (v >= 1e9) return (v/1e9).toFixed(1)+'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1)+'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0)+'K';
+  return Math.round(v).toString();
+}
+
+function buildPareto(articulos) {
+  dataPareto = [];
+  Object.keys(articulos).forEach(function(cod) {
+    var art = articulos[cod];
+    if (!art || art.stock <= 0) return;
+    if (art.agrup === 'IMPLANTES') return;
+    if (LAB_SKUS.has(cod)) return;
+    var precio = art.precio || 0;
+    var val = art.stock * precio;
+    if (val <= 0) return;
+    dataPareto.push({sku:cod, desc:art.desc, agrup:art.agrup, stock:art.stock, precio:precio, valor:val});
+  });
+  dataPareto.sort(function(a,b){return b.valor - a.valor;});
+  var total = dataPareto.reduce(function(s,d){return s+d.valor;},0);
+  var acum = 0;
+  dataPareto.forEach(function(d){
+    acum += d.valor;
+    d.pctAcum = acum/total*100;
+  });
+  var par80 = dataPareto.filter(function(d){return d.pctAcum<=80;});
+  document.getElementById('p-items').textContent = par80.length.toLocaleString('es-CL');
+  document.getElementById('p-pct').textContent = (par80.length/Math.max(dataPareto.length,1)*100).toFixed(1)+'%';
+  document.getElementById('p-valor').textContent = '$'+fmtM(total);
+}
+
+function renderPareto() {
+  var par80 = dataPareto.filter(function(d){return d.pctAcum<=80;});
+  document.getElementById('p-count').textContent = par80.length.toLocaleString('es-CL')+' items';
+  var start = (pagPareto-1)*PER_PAGE;
+  var items = par80.slice(start, start+PER_PAGE);
+  var tb = document.getElementById('tb-pareto'); tb.innerHTML='';
+  items.forEach(function(d,i){
+    var rank = start+i+1;
+    var pct = Math.min(d.pctAcum/80,1);
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="td-mono" style="color:var(--texto-dim)">'+rank+'</td>'+
+      '<td class="td-mono" style="color:var(--texto-dim)">'+d.sku+'</td>'+
+      '<td><div class="td-prod">'+d.desc+'</div></td>'+
+      '<td class="td-mono" style="font-size:11px;color:var(--texto-dim)">'+d.agrup+'</td>'+
+      '<td class="td-right">'+d.stock.toLocaleString('es-CL')+'</td>'+
+      '<td class="td-right">$'+fmtN(d.precio)+'</td>'+
+      '<td class="td-right" style="font-weight:600;color:var(--cpm-azul)">$'+fmtN(d.valor)+'</td>'+
+      '<td><div class="pct-bar"><div class="pct-track"><div class="pct-fill" style="width:'+(pct*100).toFixed(0)+'%"></div></div><span class="pct-txt">'+d.pctAcum.toFixed(1)+'%</span></div></td>';
+    tb.appendChild(tr);
+  });
+  var pages = Math.ceil(par80.length/PER_PAGE);
+  var s=start+1, e=Math.min(pagPareto*PER_PAGE,par80.length);
+  document.getElementById('pp-info').textContent = s+'-'+e+' de '+par80.length.toLocaleString('es-CL');
+  var wrap = document.getElementById('pp-btns'); wrap.innerHTML='';
+  var prev = mkBtn('<- Prev'); prev.disabled=pagPareto===1; prev.onclick=function(){pagPareto--;renderPareto();}; wrap.appendChild(prev);
+  var from=Math.max(1,pagPareto-2), to=Math.min(pages,from+4);
+  if(to-from<4) from=Math.max(1,to-4);
+  for(var p=from;p<=to;p++){
+    var b=mkBtn(p); if(p===pagPareto) b.classList.add('active');
+    (function(pp){b.onclick=function(){pagPareto=pp;renderPareto();};})(p);
+    wrap.appendChild(b);
+  }
+  var next=mkBtn('Sig ->'); next.disabled=pagPareto>=pages; next.onclick=function(){pagPareto++;renderPareto();}; wrap.appendChild(next);
+}
+
+function exportPareto() {
+  var par80 = dataPareto.filter(function(d){return d.pctAcum<=80;});
+  var h = ['Rank','SKU','Descripcion','Agrupacion','Stock','Precio unit.','Valor stock','% acumulado'];
+  var rows = par80.map(function(d,i){return[i+1,d.sku,d.desc,d.agrup,d.stock,d.precio.toFixed(0),d.valor.toFixed(0),d.pctAcum.toFixed(2)];});
+  var csv = [h].concat(rows).map(function(r){return r.join(';');}).join('
+');
+  var blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  var a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='pareto_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+function mostrarVista(vista, el) {
+  document.querySelectorAll('#nav-pareto .tab').forEach(function(b){b.classList.remove('active');});
+  el.classList.add('active');
+  document.getElementById('dashboard').style.display = vista==='alertas'?'block':'none';
+  document.getElementById('vista-pareto').style.display = vista==='pareto'?'block':'none';
+}
+
 </script>
 
 <!-- VISTA PARETO -->
