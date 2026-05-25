@@ -313,6 +313,18 @@ select:focus { border-color: var(--cpm-azul); }
   #dashboard { padding: 16px; }
   header { padding: 0 16px; }
 }
+.pct-bar{display:flex;align-items:center;gap:6px}
+.pct-track{height:6px;width:80px;background:var(--panel2);border-radius:3px;overflow:hidden;flex-shrink:0}
+.pct-fill{height:100%;border-radius:3px;background:var(--cpm-azul)}
+.pct-txt{font-family:var(--mono);font-size:11px;color:var(--cpm-azul);white-space:nowrap}
+/* PARETO INFO */
+.pareto-info{background:var(--panel);border:1.5px solid var(--border);border-radius:10px;padding:18px 22px;box-shadow:var(--shadow-sm);margin-bottom:16px;display:flex;align-items:center;gap:32px;flex-wrap:wrap}
+.pareto-stat{display:flex;flex-direction:column;gap:3px}
+.pareto-stat-val{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--cpm-azul)}
+.pareto-stat-lbl{font-size:11px;color:var(--texto-dim)}
+.pareto-divider{width:1px;height:40px;background:var(--border)}
+.pareto-desc{font-size:12px;color:var(--texto-dim);line-height:1.6;max-width:400px}
+#vista-pareto{display:none;padding:24px 28px}
 </style>
 </head>
 <body>
@@ -336,6 +348,13 @@ select:focus { border-color: var(--cpm-azul); }
     <button id="btn-volver" onclick="volverUpload()" style="display:none;">↑ Cargar nuevo reporte</button>
   </div>
 </header>
+  <!-- NAV PARETO -->
+  <div id="nav-pareto" style="display:none; padding: 0 28px 0; margin-top:-8px; margin-bottom:8px;">
+    <div style="display:flex;gap:6px;">
+      <button class="tab active" id="nav-alertas-btn" onclick="mostrarVista('alertas',this)">📋 Alertas</button>
+      <button class="tab" id="nav-pareto-btn" onclick="mostrarVista('pareto',this)">📊 Pareto existencias</button>
+    </div>
+  </div>
 
 <!-- UPLOAD -->
 <div id="upload-zone">
@@ -446,6 +465,7 @@ select:focus { border-color: var(--cpm-azul); }
 // ---- ESTADO GLOBAL ----
 var fileObjs = [null, null, null];
 var allData = [], filtered = [];
+var _articulos = {};
 var currentTab = 'todos', sortCol = 'deficit', sortDir = 'desc', page = 1;
 var PER_PAGE = 60;
 
@@ -489,7 +509,9 @@ function procesarTodo() {
     var ocs = procesarOC(resultados[2]);
     setMsg('Generando alertas...');
     setTimeout(function() {
+      _articulos = articulos;
       allData = generarAlertas(articulos, consumos, ocs);
+      buildPareto(articulos);
       buildDashboard();
     }, 100);
   });
@@ -516,13 +538,15 @@ function procesarArticulos(rows) {
   var map = {};
   rows.forEach(function(r) {
     var keys = Object.keys(r);
-    var sku='', desc='', stock=0, planf=false, agrup='';
+    var sku='', desc='', stock=0, planf=false, agrup='', precio=0;
     keys.forEach(function(k) {
       var kn = norm(k);
       // SKU: "Codigo" primero, luego variantes
       if (!sku  && (kn==='CODIGO'||kn==='CODARTICULO'||kn==='COD_ARTICULO'||kn.indexOf('CODI')>=0||kn.indexOf('SKU')>=0)) sku = norm(r[k]);
       // Descripción
       if (!desc && (kn==='DESCRIPCION'||kn==='NOMARTICULO'||kn==='NOM_ARTICULO'||kn.indexOf('DESC')>=0||kn.indexOf('NOMBRE')>=0)) desc = String(r[k]||'').trim();
+      // Precio
+      if (!precio && (kn==='PRECIO'||kn==='PRECIOVENTA'||kn==='PRECIO_VENTA')) precio = parseFloat(r[k])||0;
       // Stock: columna "actual" específicamente, luego variantes
       if (kn==='ACTUAL') stock = parseFloat(r[k])||0;
       else if (stock===0 && (kn.indexOf('STOCK')>=0||kn.indexOf('EXISTENCIA')>=0||kn.indexOf('SALDO')>=0)) stock = parseFloat(r[k])||0;
@@ -534,7 +558,7 @@ function procesarArticulos(rows) {
       // Agrupación
       if (!agrup && (kn==='AGRUPACION'||kn.indexOf('AGRUP')>=0||kn.indexOf('GRUPO')>=0||kn.indexOf('CATEG')>=0||kn.indexOf('FAMILIA')>=0)) agrup = String(r[k]||'').trim();
     });
-    if (sku) map[sku] = {sku:sku, desc:desc, stock:stock, planf:planf, agrup:agrup};
+    if (sku) map[sku] = {sku:sku, desc:desc, stock:stock, planf:planf, agrup:agrup, precio:precio};
   });
   return map;
 }
@@ -682,6 +706,9 @@ function generarAlertas(articulos, consumos, ocs) {
   var resultado = [];
   Object.keys(articulos).forEach(function(sku) {
     var art = articulos[sku];
+    // Excluir laboratorio e implantes
+    if (LAB_SKUS.has(sku)) return;
+    if (art.agrup === 'IMPLANTES') return;
     var totalSalidas6m = consumos[sku] || 0;
     var consumoQ = totalSalidas6m / 12;
     var esNuevo = (totalSalidas6m === 0); // sin historial de consumo
@@ -737,6 +764,7 @@ function buildDashboard() {
   agrupSet.forEach(function(a){ var o = document.createElement('option'); o.value = a; o.textContent = a; sel.appendChild(o); });
 
   document.getElementById('upload-zone').style.display = 'none';
+  document.getElementById('nav-pareto').style.display = 'block';
   document.getElementById('btn-volver').style.display = 'block';
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('loading').style.display = 'none';
@@ -747,6 +775,9 @@ function volverUpload() {
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('btn-volver').style.display = 'none';
   document.getElementById('upload-zone').style.display = 'flex';
+  document.getElementById('nav-pareto').style.display = 'none';
+  document.getElementById('vista-pareto').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
 }
 
 // ---- FILTROS Y TABLA ----
@@ -852,5 +883,47 @@ function exportCSV() {
   a.download = 'alertas_stock_' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
 }
 </script>
+
+<!-- VISTA PARETO -->
+<div id="vista-pareto">
+  <div class="pareto-info">
+    <div class="pareto-stat"><div class="pareto-stat-val" id="p-items">—</div><div class="pareto-stat-lbl">ítems representan el 80% del valor</div></div>
+    <div class="pareto-divider"></div>
+    <div class="pareto-stat"><div class="pareto-stat-val" id="p-pct">—</div><div class="pareto-stat-lbl">del total de ítems con stock</div></div>
+    <div class="pareto-divider"></div>
+    <div class="pareto-stat"><div class="pareto-stat-val" id="p-valor">—</div><div class="pareto-stat-lbl">valor total del inventario</div></div>
+    <div class="pareto-desc">Los ítems listados a continuación concentran el 80% del valor del inventario. Son los que mayor impacto financiero tienen en caso de quiebre o sobrestock.</div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <h3>Ítems Pareto — top 80% del valor</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="table-meta" id="p-count"></span>
+        <button class="btn-export" onclick="exportPareto()">↓ Exportar CSV</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>SKU</th>
+            <th>Descripción</th>
+            <th>Agrupación</th>
+            <th onclick="sortPareto('stock')" style="text-align:right">Stock ↕</th>
+            <th style="text-align:right">Precio unit.</th>
+            <th onclick="sortPareto('valor')" style="text-align:right">Valor stock ↕</th>
+            <th>% acumulado</th>
+          </tr>
+        </thead>
+        <tbody id="tb-pareto"></tbody>
+      </table>
+    </div>
+    <div class="pag">
+      <span id="pp-info"></span>
+      <div class="pag-btns" id="pp-btns"></div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
